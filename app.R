@@ -216,14 +216,16 @@ ui <- fluidPage(title = "Lub Covid Tracker",
                                    column(12, align = "center",
                                           sliderInput("hospitalrange",
                                                       label = "Date range:",
-                                                      min = ymd("2020-04-07"), max = max(lub_data$date), value = c(ymd("2020-04-07"), max(lub_data$date)),
+                                                      min = ymd("2020-04-07"), max = max(lub_data$date), value = c(max(lub_data$date) - weeks(8), max(lub_data$date)),
+                                                      
+                                                      
                                                       timeFormat = "%b %d, %Y",
                                                       ticks = FALSE))
                                  ),
                                  fluidRow(
                                    column(6, offset=4, align = "left",
                                           checkboxInput("display_rolling_hospital", label = "Display rolling average values above line", value = FALSE),
-                                          div(style = "margin-top:-1em", checkboxInput("display_cases_hospital", label = "Display daily hospitalizations above bars", value = TRUE))
+                                          div(style = "margin-top:-1em", checkboxInput("display_cases_hospital", label = "Display daily hospitalizations above bars", value = FALSE))
                                    )
                                  ),
                                  fluidRow(
@@ -275,22 +277,22 @@ ui <- fluidPage(title = "Lub Covid Tracker",
                                    column(12, align = "center",
                                           sliderInput("testrange", 
                                                       label = "Date range:",
-                                                      min = min(test_ratio$date), max = max(test_ratio$date), value = c(ymd("2020-04-01"), max(test_ratio$date)),
+                                                      min = min(test_ratio$date), max = max(test_ratio$date), value = c(max(lub_data$date) - weeks(8), max(lub_data$date)),
                                                       timeFormat = "%b %d, %Y",
                                                       ticks = FALSE))
                                  ),
                                  fluidRow(
                                    column(12, align = "center",
                                           sliderInput("sanity", label = "Max percent positive", min = 20, 
-                                                      max = 50, value = 100, post = "%")
+                                                      max = 50, value = 40, post = "%")
                                    )
                                  ),
                                  
                                  fluidRow(
                                    column(8, offset=3, align = "left",
-                                          checkboxInput("ratio_DSHS", label = "Data from TX DSHS (available 4/1/20–6/5/20)", value = TRUE, width = "100%"),
+                                          checkboxInput("ratio_lub", label = "Data reported by City of Lubbock (available from 6/14/20 onwards)", value = TRUE, width = "100%"),
                                           div(style = "margin-top:-1em", checkboxInput("ratio_aaron", label = "Data estimated from City of Lubbock (available 4/1/20–6/5/20)", value = TRUE, width = "100%"), width = "100%"),
-                                          div(style = "margin-top:-1em", checkboxInput("ratio_lub", label = "Data reported by City of Lubbock (available from 6/14/20 onwards)", value = TRUE, width = "100%"), width = "100%")
+                                          div(style = "margin-top:-1em", checkboxInput("ratio_DSHS", label = "Data from TX DSHS (available 4/1/20–6/5/20)", value = TRUE, width = "100%"), width = "100%")
                                    )
                                  ),
                                  
@@ -397,9 +399,9 @@ server <- function(input, output) {
                p("Percent tests positive is computed from Lubbock's reported data, dividing number of new positive tests by new tests administered.  It is not clear if the new tests administered number includes tests marked as 'pending,' which would mean that the percent test positive number being reported here is underestimating the true rate.", style = "font-size:8pt")
         ))
       inputTagList <- tagAppendChild(inputTagList, infoBox)
-      if (!nopctpos) {
-        inputTagList <- tagAppendChild(inputTagList, testsdisclaimer)
-      }
+      # if (!nopctpos) {
+      #   inputTagList <- tagAppendChild(inputTagList, testsdisclaimer)
+      # }
       inputTagList
     })
     
@@ -454,7 +456,7 @@ server <- function(input, output) {
       {if(input$display_cases) geom_text(aes(label = delta1), alpha = .25, size = 3, nudge_y=2)} +
       {if(input$display_rolling) geom_text(aes(label = round(sevendaydelta,0), y=sevendaydelta), alpha = 1, size = 3, nudge_y=2)} +
       {if(!input$display_cases) geom_text(data = filter(filtered_cases(), Specific == 1), aes(x = date, y = delta1, label = delta1),
-                                          position = position_nudge(y = 2.5), size = 3)} +
+                                          position = position_nudge(y = 2.5), size = 4)} +
       scale_x_date(date_breaks = "1 month",date_labels = "%b") +
       scale_fill_manual(values = c("black", "blue"), guide = FALSE) +
       xlim(input$range[1]-1, input$range[2]+1) +
@@ -541,6 +543,7 @@ server <- function(input, output) {
       scale_color_manual(values = c("purple", "black", "green"), labels = c("Estimated from Lubbock", "Lubbock reported data", "TX DSHS data"), name = "Data source:   ") +
       # ylim(0,40) +
       xlim(input$testrange[1]-1, input$testrange[2]+1) +
+      ylim(0, input$sanity) +
       ylab("% of tests positive") +
       xlab(element_blank()) +
       # coord_cartesian(clip = "off") +
@@ -605,6 +608,7 @@ server <- function(input, output) {
       geom_line(aes(y = (lub_hospital_sevenday)), alpha = 1, fill = "black") +
       {if(input$display_cases_hospital) geom_text(aes(label = lub_hospital), alpha = .25, size = 2, nudge_y=1)} +
       {if(input$display_rolling_hospital) geom_text(aes(label = round(lub_hospital_sevenday,0), y=lub_hospital_sevenday), alpha = 1, size = 2, nudge_y=1)} +
+      {if(!input$display_cases_hospital) geom_text(data = filter(filtered_cases(), Specific ==1), aes (x = date, y = lub_hospital, label = lub_hospital), position = position_nudge(y = 1.5), size = 4)} +
       scale_x_date(date_breaks = "1 month",date_labels = "%b") +
       scale_fill_manual(values = c("black", "blue"), guide = FALSE) +
       xlim(input$hospitalrange[1], input$hospitalrange[2]+1) +
