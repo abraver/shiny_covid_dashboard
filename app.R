@@ -89,10 +89,10 @@ test_ratio <-
   mutate_at(vars(ends_with("testratio")), ~ ifelse(. > 50, NA, .)) %>% 
   mutate(txtestratiosevenday = zoo::rollmean(txtestratio, 7, align = "right", fill = "extend"),
          aarontestratiosevenday = zoo::rollmean(aarontestratio, 7, align = "right", fill = "extend"),
-         lub_test_percent_positivesevenday = zoo::rollmean(lub_test_percent_positive, 7, align = "right", fill = "extend"))
+         lubtestratiosevenday = zoo::rollmean(lubtestratio, 7, align = "right", fill = "extend"),         lub_test_percent_positivesevenday = zoo::rollmean(lub_test_percent_positive, 7, align = "right", fill = "extend"))
 
 
-
+lub_data <- left_join(lub_data, select(test_ratio, lubtestratio, lubtestratiosevenday, date), by = "date")
 
 
 
@@ -132,6 +132,14 @@ ui <- fluidPage(title = "Lub Covid Tracker",
                                           div(style = "position:relative",
                                               plotOutput("thegraph",
                                                          click = "cases_click")
+                                          )
+                                   ),
+                                   
+                                 ),
+                                 fluidRow(
+                                   column(12,
+                                          div(style = "position:relative",
+                                              plotOutput("thegraphratio", height = 100)
                                           )
                                    ),
                                    
@@ -209,7 +217,6 @@ ui <- fluidPage(title = "Lub Covid Tracker",
                                  # verbatimTextOutput("x_value"),
                                  # verbatimTextOutput("selected_rows"),
                                  uiOutput("moreInfoBoxHospital"),
-                                 
                                  
                                  
                                  fluidRow(
@@ -317,7 +324,6 @@ ui <- fluidPage(title = "Lub Covid Tracker",
 # Server logic ----
 server <- function(input, output) {
   
-  
   # output$thisdateinfo <- renderPrint({
   #   h3(clickdata$x)
   # })
@@ -355,13 +361,17 @@ server <- function(input, output) {
       # `New tests reported` = as.integer(this_date_all_data$lub_test_daily),
       `7-day avg` = this_date_all_data$sevendaydelta,
       `Hospitalizations` = as.integer(this_date_all_data$lub_hospital),
-      # `Pct tests positive` = paste0(round(this_date_all_data$lub_test_percent_positive,2), "%")
+      `Pct tests positive*` = paste0(round(this_date_all_data$lubtestratio,2), "%"),
       `New tests` = as.integer(this_date_all_data$lub_test_daily)
     )
     nopctpos <- 0
     if (is.na(this_date_pretty$`New tests`)) {
       this_date_pretty <- select(this_date_pretty, -`New tests`)
       nopctpos <- 1
+    }
+    if (this_date_pretty$`Pct tests positive*`=="NA%") {
+      this_date_pretty <- select(this_date_pretty, -`Pct tests positive*`)
+      
     }
     
     inputTagList <- tagList()
@@ -455,8 +465,8 @@ server <- function(input, output) {
       geom_line(aes(y = (sevendaydelta)), alpha = 1, fill = "black") +
       {if(input$display_cases) geom_text(aes(label = delta1), alpha = .25, size = 3, nudge_y=2)} +
       {if(input$display_rolling) geom_text(aes(label = round(sevendaydelta,0), y=sevendaydelta), alpha = 1, size = 3, nudge_y=2)} +
-      {if(!input$display_cases) geom_text(data = filter(filtered_cases(), Specific == 1), aes(x = date, y = delta1, label = delta1),
-                                          position = position_nudge(y = 2.5), size = 4)} +
+      {if(!input$display_cases) geom_label(data = filter(filtered_cases(), Specific == 1), aes(x = date, y = delta1, label = delta1),
+                                          position = position_nudge(y = 5), size = 4, fill = "cornsilk1", alpha = 0.5)} +
       scale_x_date(date_breaks = "1 month",date_labels = "%b") +
       scale_fill_manual(values = c("black", "blue"), guide = FALSE) +
       xlim(input$range[1]-1, input$range[2]+1) +
@@ -469,11 +479,12 @@ server <- function(input, output) {
         panel.grid.major.x=element_blank(),
         axis.ticks.x=element_blank(),
         axis.title.y=element_text(face = "bold", size = 12),
-        axis.text.x = element_text(margin = margin(t = -5), hjust = 0),
+        axis.text.x = element_text(margin = margin(t = -5), hjust = 0.5),
         plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5),
         plot.caption = element_text(hjust = 0)) +
       geom_text(aes(x = date, y = 0, label = day), color = "grey", vjust = "top", size = 3, alpha = .5, check_overlap = TRUE)
+      # geom_vline(xintercept = ymd("2020-06-15"))
       # annotate(geom = "segment", y = max(na.omit(filter(lub_data, between(date, input$range[1]-1, input$range[2]+1))$delta1)), x = ymd("2020-07-03")+.5, xend = ymd("2020-07-03")+.5, yend = 0, linetype = "longdash", alpha = 0.75) +
       # annotation_custom(maskpolicytextbox, xmin = ymd("2020-07-03"), xmax = ymd("2020-07-03"), ymax = max(na.omit(filter(lub_data, between(date, input$range[1]-1, input$range[2]+1))$delta1)), ymin = max(na.omit(filter(lub_data, between(date, input$range[1]-1, input$range[2]+1))$delta1)))
     
@@ -487,8 +498,51 @@ server <- function(input, output) {
   })
   
   
+  
+  output$thegraphratio <- renderPlot({
+    
+    thegraphratio <- ggplot(filtered_cases(), aes(x = date, y = lubtestratio)) +
+      geom_point(aes(color = Specific, size = Specific), alpha = .25) +
+      geom_line(aes(y = lubtestratiosevenday), alpha = 0.25) +
+      scale_x_date(date_breaks = "1 month",date_labels = "%b", limits = c(ymd(20200401), NA)) +
+      scale_y_continuous(labels = scales::label_percent(scale = 1)) +
+      scale_color_manual(values = c("black", "blue"), guide = FALSE) +
+      scale_size_manual(values = c(1, 3), guide = FALSE) +
+      xlim(input$range[1]-1, input$range[2]+1) +
+      # geom_vline(xintercept = ymd("2020-06-15")) +
+      ylim(0, input$sanity) +
+      ylab("% positive*") +
+      xlab(element_blank()) +
+      geom_text(data = filter(filtered_cases(), Specific == 1), aes(x = date, y = lubtestratio,
+                label = paste0(round(lubtestratio, 1), "%")),
+                position = position_nudge(y = 5), size = 3, alpha = .75) +
+      # coord_cartesian(clip = "off") +
+      theme(
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y=element_line(color=grey(0.85), size=.1),
+        panel.grid.major.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.y=element_text(face = "bold", size = 12, margin = margin(r = 20, unit = "pt")),
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.position = 'bottom',
+        legend.key.width=unit(5,"char"),
+        legend.text = element_text(margin = margin(r = 40, unit = "pt")),
+        legend.key.size = unit(40, "pt")
+      )
+    
+    thegraphratiot <- ggplot_gtable(ggplot_build(thegraphratio))
+    thegraphratiot$widths[2:3] <- unit(10, "points")
+    
+    plot(thegraphratiot)
+  })
+  
+  
+  
   output$thegraphbottom <- renderPlot({
     bottom <- ggplot(filtered_cases(), aes(x = date, y = test_best_guess)) +
+      # geom_vline(xintercept = ymd("2020-06-15")) +
       geom_point(alpha = .25, aes(color = Specific, size = Specific)) +
       geom_line(aes(y = sevendaytests), alpha = 0.25) +
       geom_text(data = filter(filtered_cases(), Specific == 1), aes(x = date, y = test_best_guess, label = test_best_guess),
@@ -498,11 +552,7 @@ server <- function(input, output) {
       scale_size_manual(values = c(1, 3), guide = FALSE) +
       xlim(input$range[1]-1, input$range[2]+1) +
       ylab("Tests") +
-      scale_y_continuous(breaks = c(
-        min(na.omit(signif(filtered_cases()$lub_test_daily, 2))),
-        max(na.omit(signif(filtered_cases()$lub_test_daily, 2)))
-      )
-      ) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 2)) +
       xlab(element_blank()) +
       # coord_cartesian(clip = "off") +
       theme(
@@ -517,7 +567,7 @@ server <- function(input, output) {
     # geom_vline(xintercept = ymd("2020-06-01"))
     
     bottomt <- ggplot_gtable(ggplot_build(bottom))
-    bottomt$widths[2:3] <- unit(4, "points")
+    bottomt$widths[2:3] <- unit(5, "points")
     
     plot(bottomt)
     
@@ -526,16 +576,16 @@ server <- function(input, output) {
   
   
   output$ratiograph <- renderPlot({
-    
+
     test_ratio <- mutate_at(test_ratio, vars(ends_with("testratio"), lub_test_percent_positive), ~ ifelse(. > input$sanity, NA, .))
-    
+
     ggplot(test_ratio, aes(x = date, y = delta1)) +
       {if(input$ratio_aaron) geom_point(aes(y = aarontestratio, color = "aaron", shape = "aaron"), alpha = 1) else geom_blank(aes(linetype = "aaron", color = "aaron", shape = "aaron"))} +
       {if(input$ratio_DSHS) geom_point(aes(y = txtestratio, color = "tx", shape = "tx"), alpha = 1) else geom_blank(aes(linetype = "tx", color = "tx", shape = "tx"))} +
       {if(input$ratio_lub) geom_point(aes(y = lub_test_percent_positive, color = "lub", shape = "lub"), alpha = 1) else geom_blank(aes(linetype = "tx", color = "lub", shape = "lub"))} +
       {if(input$ratio_aaron) geom_line(aes(y = aarontestratiosevenday, linetype = "aaron", color = "aaron", shape = "aaron"), alpha = 1) else geom_blank(aes(linetype = "aaron", color = "aaron", shape = "aaron"))} +
       {if(input$ratio_DSHS) geom_line(aes(y = txtestratiosevenday, linetype = "tx", color = "tx", shape = "tx"), alpha = 1) else geom_blank(aes(linetype = "tx", color = "tx", shape = "tx"))} +
-      {if(input$ratio_lub) geom_line(aes(y = lub_test_percent_positivesevenday, linetype = "lub", color ="lub", shape = "lub"), alpha = 1) else geom_blank(aes(linetype = "lub", color = "lub", shape = "lub"))} +
+      {if(input$ratio_lub) geom_line(aes(y = lubtestratiosevenday, linetype = "lub", color ="lub", shape = "lub"), alpha = 1) else geom_blank(aes(linetype = "lub", color = "lub", shape = "lub"))} +
       scale_x_date(date_breaks = "1 month",date_labels = "%b", limits = c(ymd(20200401), NA)) +
       scale_y_continuous(labels = scales::label_percent(scale = 1)) +
       scale_shape_manual(values = c(2, 1, 0), labels = c("Estimated from Lubbock", "Lubbock reported data", "TX DSHS data"), name = "Data source:   ") +
@@ -569,6 +619,42 @@ server <- function(input, output) {
       geom_text(aes(x = date, y = 0, label = day), color = "grey", vjust = "top", size = 3, alpha = .5, check_overlap = TRUE)
   })
   
+  
+  
+  # output$ratiograph <- renderPlot({
+  #   
+  #   test_ratio <- mutate_at(test_ratio, vars(ends_with("testratio"), lub_test_percent_positive), ~ ifelse(. > input$sanity, NA, .))
+  #   
+  #   ggplot(test_ratio, aes(x = date, y = lubtestratio)) +
+  #   geom_point() +
+  #   geom_line(aes(y = lubtestratiosevenday)) +
+  #     scale_x_date(date_breaks = "1 month",date_labels = "%b", limits = c(ymd(20200401), NA)) +
+  #     scale_y_continuous(labels = scales::label_percent(scale = 1)) +
+  #     # scale_shape_manual(values = c(2, 1, 0), labels = c("Estimated from Lubbock", "Lubbock reported data", "TX DSHS data"), name = "Data source:   ") +
+  #     # scale_linetype_manual(values = c("dashed", "solid", "dotted"), labels = c("Estimated from Lubbock", "Lubbock reported data", "TX DSHS data"), name = "Data source:   ", guide = FALSE) +
+  #     # scale_color_manual(values = c("purple", "black", "green"), labels = c("Estimated from Lubbock", "Lubbock reported data", "TX DSHS data"), name = "Data source:   ") +
+  #     # ylim(0,40) +
+  #     xlim(input$testrange[1]-1, input$testrange[2]+1) +
+  #     ylim(0, input$sanity) +
+  #     ylab("% of tests positive") +
+  #     xlab(element_blank()) +
+  #     # coord_cartesian(clip = "off") +
+  #     theme(
+  #       panel.background = element_rect(fill="white"),
+  #       panel.grid.major.y=element_line(color=grey(0.85), size=.1),
+  #       panel.grid.major.x=element_blank(),
+  #       axis.ticks.x=element_blank(),
+  #       axis.text.x = element_text(margin = margin(t = -5), hjust = 0),
+  #       plot.title = element_text(hjust = 0.5),
+  #       plot.subtitle = element_text(hjust = 0.5),
+  #       legend.position = 'bottom',
+  #       legend.key.width=unit(5,"char"),
+  #       legend.text = element_text(margin = margin(r = 40, unit = "pt")),
+  #       legend.key.size = unit(40, "pt")
+  #     ) +
+  #     geom_text(aes(x = date, y = 0, label = day), color = "grey", vjust = "top", size = 3, alpha = .5, check_overlap = TRUE)
+  # })
+  # 
   
   observeEvent(input$showCasesModal, {
     showModal(modalDialog(
