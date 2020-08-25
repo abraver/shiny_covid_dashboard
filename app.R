@@ -95,6 +95,17 @@ test_ratio <-
 lub_data <- left_join(lub_data, select(test_ratio, lubtestratio, lubtestratiosevenday, date), by = "date")
 
 
+#### Now add TTU data
+TTUdata <- read_csv("/Users/abraver/Dropbox/R stuff/LubCovidTracker/covid_TTUdata.csv") %>% 
+  mutate(date = mdy(date))
+
+lub_data <- left_join(lub_data, TTUdata, by = "date") %>%  
+  mutate(TTU_total_cases = TTU_student_cases + TTU_facstaff_cases,
+        TTU_student_cases_sevenday = zoo::rollmean(TTU_student_cases, 7, align = "right", fill = "extend"),
+        TTU_facstaff_cases_sevenday = zoo::rollmean(TTU_facstaff_cases, 7, align = "right", fill = "extend"),
+        TTU_total_cases_sevenday = zoo::rollmean(TTU_total_cases, 7, align = "right", fill = "extend")
+)
+
 
 # UI ----------------------------------------------------------------------
 
@@ -107,7 +118,8 @@ ui <- fluidPage(title = "Lub Covid Tracker",
                   column(6, offset = 3, align = "center",
                          br(),
                          selectInput("plot", label = "Choose a graph:",
-                                     choices = list("Cases and tests with 7-day rolling average" = "cases",
+                                     choices = list("Lubbock Cases and tests with 7-day rolling average" = "cases",
+                                                    "TTU Cases with 7-day average" = "TTU",
                                                     "Hospitalizations with 7-day rolling average" = "hospital",
                                                     "Percent of tests reported positive" = "tests"),
                                      selected = "cases",
@@ -182,6 +194,68 @@ ui <- fluidPage(title = "Lub Covid Tracker",
                                           actionButton("showCasesModal", "About this data"))
                                  )
                 ),
+                
+                
+                
+                # ConditionalPanel - TTU ------------------------------------------------
+                
+                conditionalPanel(condition = "input.plot == 'TTU'",
+                                 fluidRow(
+                                   column(8, offset = 2,
+                                          h3("TTU cases", align = "center"),
+                                          p("With 7 day rolling average", align = "center", style = "font-size:14pt"),
+                                          p("Click a day for more information", align = "center", style = "font-size:8pt")
+                                   )
+                                 ),
+                                 fluidRow(
+                                   column(12,
+                                          div(style = "position:relative",
+                                              plotOutput("TTUgraph",
+                                                         # hover = hoverOpts("cases_hover", delay = 0, delayType = "debounce"),
+                                                         click = "cases_click")
+                                              # ,
+                                              # uiOutput("hover_info")
+                                          )
+                                   ),
+                                   
+                                 ),
+                                 
+                                 
+                                 
+                                 
+                                 
+                                 # verbatimTextOutput("x_value"),
+                                 # verbatimTextOutput("selected_rows"),
+                                 uiOutput("moreInfoBoxTTU"),
+                                 
+                                 
+                                 fluidRow(
+                                   column(12, align = "center",
+                                          sliderInput("hospitalrange",
+                                                      label = "Date range:",
+                                                      min = ymd("2020-04-07"), max = max(lub_data$date), value = c(max(lub_data$date) - weeks(8), max(lub_data$date)),
+                                                      
+                                                      
+                                                      timeFormat = "%b %d, %Y",
+                                                      ticks = FALSE))
+                                 ),
+                                 fluidRow(
+                                   column(6, offset=4, align = "left",
+                                          checkboxInput("display_rolling_hospital", label = "Display rolling average values above line", value = FALSE),
+                                          div(style = "margin-top:-1em", checkboxInput("display_cases_hospital", label = "Display daily hospitalizations above bars", value = FALSE))
+                                   )
+                                 ),
+                                 fluidRow(
+                                   column(2, offset = 5, align = "center",
+                                          actionButton("showHospitalModal", "About this data"))
+                                 )
+                ),
+                
+                
+                
+                
+                
+                
                 
                 
                 
@@ -450,9 +524,9 @@ server <- function(input, output) {
   
   maskpolicytextbox<- richtext_grob(
       "Mandatory mask<br>policy enacted",
-      halign = 0.5, hjust = 1,
+      halign = 0.5, hjust = 0,
       padding = unit(c(3, 2, 2, 3), "pt"),
-      margin = unit(c(20, -4, 0, 0), "pt"),
+      margin = unit(c(20, 0, 0, 6), "pt"),
       r = unit(4, "pt"),
       gp = gpar(alpha = 0.9),
       box_gp = gpar(col = "black", fill = "lemonchiffon", alpha = 0.75)
@@ -483,10 +557,10 @@ server <- function(input, output) {
         plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5),
         plot.caption = element_text(hjust = 0)) +
-      geom_text(aes(x = date, y = 0, label = day), color = "grey", vjust = "top", size = 3, alpha = .5, check_overlap = TRUE)
+      geom_text(aes(x = date, y = 0, label = day), color = "grey", vjust = "top", size = 3, alpha = .5, check_overlap = TRUE) +
       # geom_vline(xintercept = ymd("2020-06-15"))
-      # annotate(geom = "segment", y = max(na.omit(filter(lub_data, between(date, input$range[1]-1, input$range[2]+1))$delta1)), x = ymd("2020-07-03")+.5, xend = ymd("2020-07-03")+.5, yend = 0, linetype = "longdash", alpha = 0.75) +
-      # annotation_custom(maskpolicytextbox, xmin = ymd("2020-07-03"), xmax = ymd("2020-07-03"), ymax = max(na.omit(filter(lub_data, between(date, input$range[1]-1, input$range[2]+1))$delta1)), ymin = max(na.omit(filter(lub_data, between(date, input$range[1]-1, input$range[2]+1))$delta1)))
+      annotate(geom = "segment", y = max(na.omit(filter(lub_data, between(date, input$range[1]-1, input$range[2]+1))$delta1)), x = ymd("2020-07-03")+.5, xend = ymd("2020-07-03")+.5, yend = 0, linetype = "longdash", alpha = 0.75) +
+      annotation_custom(maskpolicytextbox, xmin = ymd("2020-07-03"), xmax = ymd("2020-07-03"), ymax = max(na.omit(filter(lub_data, between(date, input$range[1]-1, input$range[2]+1))$delta1)), ymin = max(na.omit(filter(lub_data, between(date, input$range[1]-1, input$range[2]+1))$delta1)))
     
     
     # topt <- ggplot_gtable(ggplot_build(top))
@@ -716,6 +790,47 @@ server <- function(input, output) {
   
   
   
+  
+  output$TTUgraph <- renderPlot({
+    TTUgraphdata <- filtered_cases() %>%
+    # TTUgraphdata <- lub_data %>% 
+      filter(date > ymd("2020-08-15	
+")) %>% 
+      select(date, Specific, starts_with("TTU")) %>%
+      select(date, Specific, ends_with("cases") | ends_with("cases_sevenday")) %>% 
+      pivot_longer(cols = starts_with("TTU"), names_to = c("TTUmeasurement", "TTUsevenday"), names_prefix = "TTU_", names_pattern = "^([A-z]*)_cases_?([A-z]*)") %>% 
+      mutate(TTUsevenday = na_if(TTUsevenday, ""),
+             TTUsevenday = replace_na(TTUsevenday, "no"))
+    
+    
+    ggplot(filter(TTUgraphdata, TTUsevenday == "no" & TTUmeasurement %in% c("student", "facstaff")), aes(x = date, y = value, fill = TTUmeasurement)) +
+      geom_col(alpha = .25, aes(color = factor(Specific))) +
+      # geom_line(aes(y = (lub_hospital_sevenday)), alpha = 1, fill = "black") +
+      # {if(input$display_cases_hospital) geom_text(aes(label = lub_hospital), alpha = .25, size = 2, nudge_y=1)} +
+      # {if(input$display_rolling_hospital) geom_text(aes(label = round(lub_hospital_sevenday,0), y=lub_hospital_sevenday), alpha = 1, size = 2, nudge_y=1)} +
+      # {if(!input$display_cases_hospital) geom_text(data = filter(filtered_cases(), Specific ==1), aes (x = date, y = lub_hospital, label = lub_hospital), position = position_nudge(y = 1.5), size = 4)} +
+      geom_line(data = filter(TTUgraphdata, TTUsevenday == "sevenday" & TTUmeasurement == "total"),
+                aes(x = date, y = value)) +
+      # scale_x_date(date_breaks = "1 month",date_labels = "%b") +
+      scale_fill_manual(breaks = c("facstaff", "student"), values = c("black", "red", "purple")) +
+      scale_color_manual(values = c("white", "blue"), guide = FALSE) +
+      # xlim(input$hospitalrange[1], input$hospitalrange[2]+1) +
+      # ylab("Hospitalizations") +
+      # xlab(element_blank()) +
+      # coord_cartesian(clip = "off") +
+      theme(
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y=element_line(color=grey(0.85), size=.1),
+        panel.grid.major.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.x = element_text(margin = margin(t = -5), hjust = 0),
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)
+      ) 
+    # +
+      # geom_text(aes(x = date, y = 0, label = day), color = "grey", vjust = "top", size = 3, alpha = .5, check_overlap = TRUE)
+    
+  })
   
   
   
