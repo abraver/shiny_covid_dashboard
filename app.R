@@ -96,15 +96,21 @@ lub_data <- left_join(lub_data, select(test_ratio, lubtestratio, lubtestratiosev
 
 
 #### Now add TTU data
-TTUdata <- read_csv("/Users/abraver/Dropbox/R stuff/LubCovidTracker/covid_TTUdata.csv") %>% 
+TTUdata <- read_csv("https://www.dropbox.com/s/l34x77erbqdhkqh/covid_TTUdata.csv?dl=1") %>% 
   mutate(date = mdy(date))
 
 lub_data <- left_join(lub_data, TTUdata, by = "date") %>%  
-  mutate(TTU_total_cases = TTU_student_cases + TTU_facstaff_cases,
-        TTU_student_cases_sevenday = zoo::rollmean(TTU_student_cases, 7, align = "right", fill = "extend"),
-        TTU_facstaff_cases_sevenday = zoo::rollmean(TTU_facstaff_cases, 7, align = "right", fill = "extend"),
-        TTU_total_cases_sevenday = zoo::rollmean(TTU_total_cases, 7, align = "right", fill = "extend")
-)
+  mutate(TTU_total_cases = TTU_student_cases + TTU_facstaff_cases)
+
+lub_data <- lub_data %>% 
+  mutate(TTU_total_lag = lag(TTU_total_cases, 1),
+         TTU_student_lag = lag(TTU_student_cases, 1),
+         TTU_facstaff_lag = lag(TTU_facstaff_cases, 1)) %>%
+  fill(ends_with("lag")) %>% 
+  mutate(TTU_total_delta = TTU_total_cases - lag(TTU_total_lag, 1),
+         TTU_student_delta = TTU_student_cases - lag(TTU_student_lag, 1),
+         TTU_facstaff_delta = TTU_facstaff_cases - lag(TTU_facstaff_lag, 1)) %>% 
+  select(-ends_with("lag"))
 
 
 # UI ----------------------------------------------------------------------
@@ -119,7 +125,7 @@ ui <- fluidPage(title = "Lub Covid Tracker",
                          br(),
                          selectInput("plot", label = "Choose a graph:",
                                      choices = list("Lubbock Cases and tests with 7-day rolling average" = "cases",
-                                                    "TTU Cases with 7-day average" = "TTU",
+                                                    "TTU Cases" = "TTU",
                                                     "Hospitalizations with 7-day rolling average" = "hospital",
                                                     "Percent of tests reported positive" = "tests"),
                                      selected = "cases",
@@ -202,9 +208,10 @@ ui <- fluidPage(title = "Lub Covid Tracker",
                 conditionalPanel(condition = "input.plot == 'TTU'",
                                  fluidRow(
                                    column(8, offset = 2,
-                                          h3("TTU cases", align = "center"),
-                                          p("With 7 day rolling average", align = "center", style = "font-size:14pt"),
-                                          p("Click a day for more information", align = "center", style = "font-size:8pt")
+                                          h3("TTU cases (very beta)", align = "center"),
+                                          p("Total cases reported", align = "center", style = "font-size:14pt"),
+                                          # p("Click a day for more information", align = "center", style = "font-size:8pt")
+                                          p("Click a bar for more info.  NB: TTU has released data on an irregular schedule.", align = "center", style = "font-size:8pt")
                                    )
                                  ),
                                  fluidRow(
@@ -231,23 +238,23 @@ ui <- fluidPage(title = "Lub Covid Tracker",
                                  
                                  fluidRow(
                                    column(12, align = "center",
-                                          sliderInput("hospitalrange",
+                                          sliderInput("TTUrange",
                                                       label = "Date range:",
-                                                      min = ymd("2020-04-07"), max = max(lub_data$date), value = c(max(lub_data$date) - weeks(8), max(lub_data$date)),
+                                                      min = ymd("2020-08-10"), max = max(lub_data$date), value = c(ymd("2020-08-10"), max(lub_data$date)),
                                                       
                                                       
                                                       timeFormat = "%b %d, %Y",
                                                       ticks = FALSE))
                                  ),
-                                 fluidRow(
-                                   column(6, offset=4, align = "left",
-                                          checkboxInput("display_rolling_hospital", label = "Display rolling average values above line", value = FALSE),
-                                          div(style = "margin-top:-1em", checkboxInput("display_cases_hospital", label = "Display daily hospitalizations above bars", value = FALSE))
-                                   )
-                                 ),
+                                 # fluidRow(
+                                 #   column(6, offset=4, align = "left",
+                                 #          checkboxInput("display_rolling_hospital", label = "Display rolling average values above line", value = FALSE),
+                                 #          div(style = "margin-top:-1em", checkboxInput("display_cases_hospital", label = "Display daily hospitalizations above bars", value = FALSE))
+                                 #   )
+                                 # ),
                                  fluidRow(
                                    column(2, offset = 5, align = "center",
-                                          actionButton("showHospitalModal", "About this data"))
+                                          actionButton("showTTUModal", "About this data"))
                                  )
                 ),
                 
@@ -429,6 +436,9 @@ server <- function(input, output) {
     this_date_test_data <- select(filter(test_ratio, date == this_date_lub_data$date), date, lub_test_daily, lub_test_positive, lub_test_negative, lub_test_pending, lub_test_percent_positive)
     this_date_all_data <- left_join(this_date_lub_data, this_date_test_data, by = "date")
     this_date_all_data$lub_test_daily <- coalesce(this_date_all_data$lub_test_daily.x, this_date_all_data$lub_test_daily.y)
+    
+
+    
     this_date_pretty <- tibble(
       Date = format(this_date_all_data$date, "%b %d, %Y"),
       `New cases` = as.integer(this_date_all_data$delta1),
@@ -445,8 +455,25 @@ server <- function(input, output) {
     }
     if (this_date_pretty$`Pct tests positive*`=="NA%") {
       this_date_pretty <- select(this_date_pretty, -`Pct tests positive*`)
-      
     }
+    
+    
+    
+    if (is.na(this_date_all_data$TTU_total_cases)) {
+      this_date_lub_data <- filter(theData, date == max(filter(theData, !is.na(TTU_total_cases))$date))
+      this_date_test_data <- select(filter(test_ratio, date == this_date_lub_data$date), date, lub_test_daily, lub_test_positive, lub_test_negative, lub_test_pending, lub_test_percent_positive)
+      this_date_all_data <- left_join(this_date_lub_data, this_date_test_data, by = "date")
+      this_date_all_data$lub_test_daily <- coalesce(this_date_all_data$lub_test_daily.x, this_date_all_data$lub_test_daily.y)
+    }
+      this_date_TTU_pretty <- tibble(
+        Date = format(this_date_all_data$date, "%b %d, %Y"),
+        `Total TTU Cases` = as.integer(this_date_all_data$TTU_total_cases),
+        `Total Student Cases` = as.integer(this_date_all_data$TTU_student_cases),
+        `Total Faculty/Staff Cases` = as.integer(this_date_all_data$TTU_facstaff_cases),
+        `New TTU Cases` = as.integer(this_date_all_data$TTU_total_delta),
+        `New Student Cases` = as.integer(this_date_all_data$TTU_student_delta),
+        `New Faculty/Staff Cases` = as.integer(this_date_all_data$TTU_facstaff_delta)
+      )
     
     inputTagList <- tagList()
     
@@ -469,6 +496,26 @@ server <- function(input, output) {
       # inputTagList
     })
     
+    
+    
+    output$moreInfoBoxTTU <- renderUI({
+      infoBox <- fluidRow(
+        column(12, align = "center",
+               renderTable({this_date_TTU_pretty},  
+                           rownames = FALSE,
+                           align = "c")
+        )
+      )
+      testsdisclaimer <- fluidRow(
+        column(8, align = "center", offset = 2,
+               p("Percent tests positive is computed from Lubbock's reported data, dividing number of new positive tests by new tests administered.  It is not clear if the new tests administered number includes tests marked as 'pending,' which would mean that the percent test positive number being reported here is underestimating the true rate.", style = "font-size:8pt")
+        ))
+      inputTagList <- tagAppendChild(inputTagList, infoBox)
+      # if (!nopctpos) {
+      #   inputTagList <- tagAppendChild(inputTagList, testsdisclaimer)
+      # }
+      inputTagList
+    })
     
     output$moreInfoBoxHospital <- renderUI({
       infoBox <- fluidRow(
@@ -760,7 +807,16 @@ server <- function(input, output) {
     ))
   })  
   
-  
+  observeEvent(input$showTTUModal, {
+    showModal(modalDialog(
+      title = "About this data",
+      p("All TTU data comes from ",
+        a(href="http://www.depts.ttu.edu/communications/emergency/coronavirus/", "the TTU COVID dashboard", .noWS = "after"),
+        ".  "
+      ),
+      easyClose = TRUE
+    ))
+  }) 
   
   output$hospitalgraph <- renderPlot({
     ggplot(filtered_cases(), aes(x = date, y = lub_hospital)) +
@@ -793,28 +849,29 @@ server <- function(input, output) {
   
   output$TTUgraph <- renderPlot({
     TTUgraphdata <- filtered_cases() %>%
-    # TTUgraphdata <- lub_data %>% 
-      filter(date > ymd("2020-08-15	
-")) %>% 
+    # TTUgraphdata <- lub_data %>%
+      filter(date >= ymd("2020-08-05")) %>% 
+      filter(!is.na(TTU_total_cases)) %>% 
       select(date, Specific, starts_with("TTU")) %>%
       select(date, Specific, ends_with("cases") | ends_with("cases_sevenday")) %>% 
       pivot_longer(cols = starts_with("TTU"), names_to = c("TTUmeasurement", "TTUsevenday"), names_prefix = "TTU_", names_pattern = "^([A-z]*)_cases_?([A-z]*)") %>% 
       mutate(TTUsevenday = na_if(TTUsevenday, ""),
-             TTUsevenday = replace_na(TTUsevenday, "no"))
-    
+             TTUsevenday = replace_na(TTUsevenday, "no"),
+             Specific = ifelse(date == max(filter(TTUgraphdata, TTUmeasurement == "total" & !is.na(value))$date), 1, 0))
     
     ggplot(filter(TTUgraphdata, TTUsevenday == "no" & TTUmeasurement %in% c("student", "facstaff")), aes(x = date, y = value, fill = TTUmeasurement)) +
-      geom_col(alpha = .25, aes(color = factor(Specific))) +
-      # geom_line(aes(y = (lub_hospital_sevenday)), alpha = 1, fill = "black") +
-      # {if(input$display_cases_hospital) geom_text(aes(label = lub_hospital), alpha = .25, size = 2, nudge_y=1)} +
-      # {if(input$display_rolling_hospital) geom_text(aes(label = round(lub_hospital_sevenday,0), y=lub_hospital_sevenday), alpha = 1, size = 2, nudge_y=1)} +
-      # {if(!input$display_cases_hospital) geom_text(data = filter(filtered_cases(), Specific ==1), aes (x = date, y = lub_hospital, label = lub_hospital), position = position_nudge(y = 1.5), size = 4)} +
-      geom_line(data = filter(TTUgraphdata, TTUsevenday == "sevenday" & TTUmeasurement == "total"),
-                aes(x = date, y = value)) +
-      # scale_x_date(date_breaks = "1 month",date_labels = "%b") +
-      scale_fill_manual(breaks = c("facstaff", "student"), values = c("black", "red", "purple")) +
+      # geom_col(alpha = .25, aes(color = factor(Specific)), width = 1) +
+      geom_col(alpha = .25, width = 1) +
+      geom_text(aes(label = value), alpha = .25, size = 5, position = position_stack(vjust = .5)) +
+      geom_text(data = filter(TTUgraphdata, TTUmeasurement == "total" & TTUsevenday == "no"), aes(label = value, y = value), alpha = 1, size = 5, nudge_y = 5) +
+      # geom_line(data = filter(TTUgraphdata, TTUsevenday == "sevenday" & TTUmeasurement == "total"),
+                # aes(x = date, y = value)) +
+      scale_x_date(date_breaks = "1 day", date_labels = "%b %d", limits = c(input$TTUrange[1]-2, input$TTUrange[2]+1)) +
+      # scale_x_date(date_labels = "%b %d", limits = c(ymd("2020-08-08"), today())) +
+      # geom_text(aes(x = date, y = 0, label = strftime(ymd(date), "%b %d")), color = "black", vjust = "top", size = 4, alpha = .75, check_overlap = TRUE) +
+      # xlim(input$TTUrange[1]-1, input$TTUrange[2]+1) +
+      scale_fill_manual(breaks = c("facstaff", "student"), values = c("black", "red", "purple"), labels = c("Faculty/Staff     ", "Students"), name = "") +
       scale_color_manual(values = c("white", "blue"), guide = FALSE) +
-      # xlim(input$hospitalrange[1], input$hospitalrange[2]+1) +
       # ylab("Hospitalizations") +
       # xlab(element_blank()) +
       # coord_cartesian(clip = "off") +
@@ -823,9 +880,13 @@ server <- function(input, output) {
         panel.grid.major.y=element_line(color=grey(0.85), size=.1),
         panel.grid.major.x=element_blank(),
         axis.ticks.x=element_blank(),
-        axis.text.x = element_text(margin = margin(t = -5), hjust = 0),
+        axis.text.x = element_text(margin = margin(t = -5), hjust = 0.5, size = 10),
+        axis.title.x = element_blank(),
         plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.text = element_text(size = 15),
+        legend.key.size = unit(2, "line"),
+        legend.position = "bottom"
       ) 
     # +
       # geom_text(aes(x = date, y = 0, label = day), color = "grey", vjust = "top", size = 3, alpha = .5, check_overlap = TRUE)
