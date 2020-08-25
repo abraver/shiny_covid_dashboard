@@ -857,7 +857,7 @@ server <- function(input, output) {
       pivot_longer(cols = starts_with("TTU"), names_to = c("TTUmeasurement", "TTUsevenday"), names_prefix = "TTU_", names_pattern = "^([A-z]*)_cases_?([A-z]*)") %>% 
       mutate(TTUsevenday = na_if(TTUsevenday, ""),
              TTUsevenday = replace_na(TTUsevenday, "no"),
-             Specific = ifelse(date == max(filter(TTUgraphdata, TTUmeasurement == "total" & !is.na(value))$date), 1, 0))
+             Specific = ifelse(date == max(filter(., TTUmeasurement == "total" & !is.na(value))$date), 1, 0))
     
     ggplot(filter(TTUgraphdata, TTUsevenday == "no" & TTUmeasurement %in% c("student", "facstaff")), aes(x = date, y = value, fill = TTUmeasurement)) +
       # geom_col(alpha = .25, aes(color = factor(Specific)), width = 1) +

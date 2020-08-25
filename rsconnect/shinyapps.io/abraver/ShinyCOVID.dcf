@@ -5,9 +5,9 @@ account: abraver
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 2419599
-bundleId: 3383739
+bundleId: 3557632
 url: https://abraver.shinyapps.io/ShinyCOVID/
-when: 1594594493.83933
+when: 1598396155.62684
 asMultiple: FALSE
 asStatic: FALSE
 ignoredFiles: app.R.july5.old.R|MWE.R|oldapp.jun30-2020.R|Rplots.pdf|shiny-run.R|testing.R
