@@ -107,9 +107,9 @@ lub_data <- lub_data %>%
          TTU_student_lag = lag(TTU_student_cases, 1),
          TTU_facstaff_lag = lag(TTU_facstaff_cases, 1)) %>%
   fill(ends_with("lag")) %>% 
-  mutate(TTU_total_delta = TTU_total_cases - lag(TTU_total_lag, 1),
-         TTU_student_delta = TTU_student_cases - lag(TTU_student_lag, 1),
-         TTU_facstaff_delta = TTU_facstaff_cases - lag(TTU_facstaff_lag, 1)) %>% 
+  mutate(TTU_total_delta = TTU_total_cases - TTU_total_lag,
+         TTU_student_delta = TTU_student_cases - TTU_student_lag,
+         TTU_facstaff_delta = TTU_facstaff_cases - TTU_facstaff_lag, 1) %>% 
   select(-ends_with("lag"))
 
 
