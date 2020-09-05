@@ -600,7 +600,7 @@ server <- function(input, output) {
         panel.grid.major.x=element_blank(),
         axis.ticks.x=element_blank(),
         axis.title.y=element_text(face = "bold", size = 12),
-        axis.text.x = element_text(margin = margin(t = -5), hjust = 0.5),
+        axis.text.x = element_text(margin = margin(t = 0), hjust = 0.5),
         plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5),
         plot.caption = element_text(hjust = 0)) +
@@ -849,7 +849,7 @@ server <- function(input, output) {
   
   output$TTUgraph <- renderPlot({
     TTUgraphdata <- filtered_cases() %>%
-    # TTUgraphdata <- lub_data %>%
+      # TTUgraphdata <- lub_data %>%
       filter(date >= ymd("2020-08-05")) %>% 
       filter(!is.na(TTU_total_cases)) %>% 
       select(date, Specific, starts_with("TTU")) %>%
@@ -857,16 +857,22 @@ server <- function(input, output) {
       pivot_longer(cols = starts_with("TTU"), names_to = c("TTUmeasurement", "TTUsevenday"), names_prefix = "TTU_", names_pattern = "^([A-z]*)_cases_?([A-z]*)") %>% 
       mutate(TTUsevenday = na_if(TTUsevenday, ""),
              TTUsevenday = replace_na(TTUsevenday, "no"),
-             Specific = ifelse(date == max(filter(., TTUmeasurement == "total" & !is.na(value))$date), 1, 0))
+             Specific = ifelse(date == max(filter(., TTUmeasurement == "total" & !is.na(value))$date), 1, 0),
+             TTUmonth = month(date, label=TRUE, abbr = TRUE),
+             TTUday = format(date, format="%d")
+             )
     
     ggplot(filter(TTUgraphdata, TTUsevenday == "no" & TTUmeasurement %in% c("student", "facstaff")), aes(x = date, y = value, fill = TTUmeasurement)) +
       # geom_col(alpha = .25, aes(color = factor(Specific)), width = 1) +
-      geom_col(alpha = .25, width = 1) +
+      geom_col(alpha = .25, width = .9) +
       geom_text(aes(label = value), alpha = .25, size = 5, position = position_stack(vjust = .5)) +
-      geom_text(data = filter(TTUgraphdata, TTUmeasurement == "total" & TTUsevenday == "no"), aes(label = value, y = value), alpha = 1, size = 5, nudge_y = 5) +
+      geom_text(data = filter(TTUgraphdata, TTUmeasurement == "total" & TTUsevenday == "no"), aes(label = value, y = value), alpha = 1, size = 5, nudge_y = 15) +
       # geom_line(data = filter(TTUgraphdata, TTUsevenday == "sevenday" & TTUmeasurement == "total"),
                 # aes(x = date, y = value)) +
-      scale_x_date(date_breaks = "1 day", date_labels = "%b %d", limits = c(input$TTUrange[1]-2, input$TTUrange[2]+1)) +
+      scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+      xlim(input$TTUrange[1]-2, input$TTUrange[2]+1) +
+      ylab("Cases") +
+      # scale_x_date(date_breaks = "1 week", date_labels = "%b %d", limits = c(input$TTUrange[1]-2, input$TTUrange[2]+1))
       # scale_x_date(date_labels = "%b %d", limits = c(ymd("2020-08-08"), today())) +
       # geom_text(aes(x = date, y = 0, label = strftime(ymd(date), "%b %d")), color = "black", vjust = "top", size = 4, alpha = .75, check_overlap = TRUE) +
       # xlim(input$TTUrange[1]-1, input$TTUrange[2]+1) +
@@ -887,9 +893,8 @@ server <- function(input, output) {
         legend.text = element_text(size = 15),
         legend.key.size = unit(2, "line"),
         legend.position = "bottom"
-      ) 
-    # +
-      # geom_text(aes(x = date, y = 0, label = day), color = "grey", vjust = "top", size = 3, alpha = .5, check_overlap = TRUE)
+      ) +
+      geom_text(aes(x = date, y = -10, label = TTUday), color = "black", vjust = "top", size = 4, alpha = 1, check_overlap = TRUE)
     
   })
   
