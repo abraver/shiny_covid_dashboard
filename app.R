@@ -131,6 +131,8 @@ ui <- fluidPage(title = "Lub Covid Tracker",
                                      selected = "cases",
                                      width = "400px"))
                 ),
+                fluidRow(column(10, offset = 1, align = "center",
+                         p("NB: Lubbock has been updating previous days' case counts, but I am only reporting what they publish each day.  This may lead to a discrepancy in e.g., the number of cases on this graph vs. the county website.  (This is especially noticeable in late September, when Lubbock went back and included some cases that had originally been reported in other counties.)"))),
                 
                 
                 
